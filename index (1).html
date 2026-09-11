@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>ReportaCidade</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<style>
+  :root{
+    --bg:#f4f5f7; --surface:#ffffff; --surface-2:#eef0f3; --text:#1a1d23; --text-muted:#6b7280;
+    --border:#e2e4e9; --accent:#2563eb; --accent-ink:#ffffff; --danger:#dc2626; --ok:#16a34a;
+    --shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14161a; --surface:#1c1f26; --surface-2:#242830; --text:#eef0f3; --text-muted:#9aa1ac;
+      --border:#2c313b; --shadow:0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14161a; --surface:#1c1f26; --surface-2:#242830; --text:#eef0f3; --text-muted:#9aa1ac;
+    --border:#2c313b; --shadow:0 1px 3px rgba(0,0,0,0.4);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh; padding-bottom:24px;
+  }
+  .app{max-width:640px; margin:0 auto; padding:0 16px;}
+  header.top{
+    position:sticky; top:0; z-index:20; background:var(--bg);
+    padding:16px 0 8px; display:flex; align-items:center; justify-content:space-between;
+  }
+  header.top h1{font-size:18px; margin:0; display:flex; align-items:center; gap:8px;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
+  .hidden{display:none !important;}
+
+  .type-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
+  .type-btn{
+    padding:18px 10px; text-align:center; cursor:pointer; display:flex; flex-direction:column;
+    align-items:center; gap:6px; font-weight:600; font-size:14px; border:1.5px solid var(--border);
+  }
+  .type-btn .emoji{font-size:28px;}
+  .type-btn:active{transform:scale(0.98);}
+
+  .flow{padding:18px; margin-bottom:16px;}
+  .flow-step{display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:14px; color:var(--text-muted);}
+  .spinner{width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .step-ok{color:var(--ok);} .step-err{color:var(--danger);}
+
+  .warn-box{
+    background:color-mix(in srgb, var(--danger) 12%, var(--surface)); border:1px solid var(--danger);
+    border-radius:10px; padding:12px 14px; font-size:14px; margin-top:6px;
+  }
+  .btn{
+    padding:12px 16px; border-radius:10px; border:none; font-weight:600; font-size:14px; cursor:pointer;
+    background:var(--accent); color:var(--accent-ink); width:100%;
+  }
+  .btn.secondary{background:var(--surface-2); color:var(--text);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-row{display:flex; gap:8px; margin-top:10px;}
+  .btn-row .btn{width:auto; flex:1;}
+
+  textarea, .photo-input-label{
+    width:100%; border:1.5px solid var(--border); border-radius:10px; background:var(--bg);
+    color:var(--text); font-family:inherit; font-size:14px; padding:10px; margin-top:10px;
+  }
+  .photo-input-label{display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; padding:16px; text-align:center;}
+  .photo-preview{width:100%; border-radius:10px; margin-top:10px; max-height:220px; object-fit:cover; display:block;}
+
+  .success-box{text-align:center; padding:8px 0;}
+  .success-box .big{font-size:40px;}
+  .footnote{font-size:11px; color:var(--text-muted); text-align:center; margin-top:20px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>📍 ReportaCidade</h1>
+  </header>
+
+  <div id="typeGrid" class="type-grid"></div>
+  <div id="flowArea"></div>
+
+  <div class="footnote">ReportaCidade — reportes de problemas urbanos.</div>
+</div>
+
+<script>
+(function(){
+  // ======================================================================
+  // CONFIGURAÇÃO DO FIREBASE — preencha com os dados do SEU projeto
+  // (mesmo valor usado em admin.html — é o mesmo projeto/banco)
+  // ======================================================================
+  const firebaseConfig = {
+    apiKey: "COLE_AQUI_SUA_API_KEY",
+    authDomain: "SEU_PROJETO.firebaseapp.com",
+    projectId: "SEU_PROJETO",
+    storageBucket: "SEU_PROJETO.appspot.com",
+    messagingSenderId: "000000000000",
+    appId: "1:000000000000:web:xxxxxxxxxxxxxxxxxxxxxx",
+  };
+  // ======================================================================
+
+  const TYPES = {
+    buraco:      { label:'Buraco na via',       emoji:'🕳️' },
+    iluminacao:  { label:'Iluminação pública',   emoji:'💡' },
+    acidente:    { label:'Acidente',             emoji:'🚧' },
+    fogo:        { label:'Incêndio',             emoji:'🔥' },
+  };
+  const RADIUS_M = 20;
+  const STATUS_LABEL = { pendente:'Pendente', em_andamento:'Em andamento', resolvido:'Resolvido' };
+
+  let db = null, storage = null;
+
+  function haversine(lat1, lng1, lat2, lng2){
+    const R = 6371000;
+    const toRad = d => d * Math.PI/180;
+    const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+  function timeAgo(iso){
+    const s = (Date.now() - new Date(iso).getTime())/1000;
+    if (s < 60) return 'agora mesmo';
+    if (s < 3600) return Math.floor(s/60)+' min atrás';
+    if (s < 86400) return Math.floor(s/3600)+' h atrás';
+    return Math.floor(s/86400)+' d atrás';
+  }
+  function getLocation(){
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('Geolocalização não suportada neste navegador.'));
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        err => reject(new Error(err.message || 'Não foi possível obter a localização.')),
+        { enableHighAccuracy:true, timeout:12000 }
+      );
+    });
+  }
+
+  function init(){
+    if (firebaseConfig.apiKey === "COLE_AQUI_SUA_API_KEY"){
+      document.getElementById('flowArea').innerHTML =
+        '<div class="warn-box"><strong>Firebase não configurado.</strong> Preencha o objeto <code>firebaseConfig</code> neste arquivo (veja INSTRUCOES-DEPLOY.md).</div>';
+      renderTypeGrid();
+      return;
+    }
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      storage = firebase.storage();
+    } catch(e){
+      document.getElementById('flowArea').innerHTML = `<div class="warn-box">Erro ao conectar: ${e.message}</div>`;
+    }
+    renderTypeGrid();
+  }
+
+  function renderTypeGrid(){
+    const grid = document.getElementById('typeGrid');
+    grid.innerHTML = '';
+    Object.entries(TYPES).forEach(([key, t]) => {
+      const btn = document.createElement('div');
+      btn.className = 'card type-btn';
+      btn.innerHTML = `<span class="emoji">${t.emoji}</span><span>${t.label}</span>`;
+      btn.addEventListener('click', () => startFlow(key));
+      grid.appendChild(btn);
+    });
+  }
+
+  let flowState = null;
+
+  async function startFlow(typeKey){
+    flowState = { type: typeKey, location: null, photoFile: null };
+    const area = document.getElementById('flowArea');
+    const t = TYPES[typeKey];
+    area.innerHTML = `
+      <div class="card flow">
+        <div style="font-weight:700; margin-bottom:12px;">${t.emoji} ${t.label}</div>
+        <div class="flow-step" id="stepLoc"><div class="spinner"></div><span>Obtendo sua localização exata...</span></div>
+        <div id="flowBody"></div>
+      </div>`;
+
+    if (!db){
+      document.getElementById('stepLoc').innerHTML = '<span class="step-err">✕</span><span>Banco de dados indisponível — não é possível reportar agora.</span>';
+      return;
+    }
+
+    try {
+      const loc = await getLocation();
+      flowState.location = loc;
+      document.getElementById('stepLoc').innerHTML = `<span class="step-ok">✓</span><span>Localização obtida (±precisão do GPS)</span>`;
+      await checkDuplicateAndProceed();
+    } catch(err){
+      document.getElementById('stepLoc').innerHTML = `<span class="step-err">✕</span><span>${err.message}</span>`;
+      renderManualLocationFallback();
+    }
+  }
+
+  function renderManualLocationFallback(){
+    const body = document.getElementById('flowBody');
+    body.innerHTML = `
+      <div class="warn-box">
+        Não foi possível obter a localização automaticamente. Verifique se a permissão de localização
+        está liberada nas configurações do navegador, ou informe as coordenadas manualmente abaixo
+        (no Google Maps: toque e segure o local no mapa para ver latitude e longitude).
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <div style="flex:1;">
+          <label style="font-size:12px; color:var(--text-muted);">Latitude</label>
+          <textarea id="manualLat" rows="1" placeholder="-16.4382"></textarea>
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px; color:var(--text-muted);">Longitude</label>
+          <textarea id="manualLng" rows="1" placeholder="-49.0524"></textarea>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" id="btnRetryGeo">Tentar GPS de novo</button>
+        <button class="btn" id="btnUseManual">Usar estas coordenadas</button>
+      </div>`;
+
+    document.getElementById('btnRetryGeo').addEventListener('click', async () => {
+      document.getElementById('stepLoc').innerHTML = `<div class="spinner"></div><span>Obtendo sua localização exata...</span>`;
+      try {
+        const loc = await getLocation();
+        flowState.location = loc;
+        document.getElementById('stepLoc').innerHTML = `<span class="step-ok">✓</span><span>Localização obtida (±precisão do GPS)</span>`;
+        await checkDuplicateAndProceed();
+      } catch(err){
+        document.getElementById('stepLoc').innerHTML = `<span class="step-err">✕</span><span>${err.message}</span>`;
+        renderManualLocationFallback();
+      }
+    });
+
+    document.getElementById('btnUseManual').addEventListener('click', async () => {
+      const lat = parseFloat(document.getElementById('manualLat').value.trim());
+      const lng = parseFloat(document.getElementById('manualLng').value.trim());
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180){
+        alert('Informe latitude e longitude válidas (ex: -16.4382 e -49.0524).');
+        return;
+      }
+      flowState.location = { lat, lng };
+      document.getElementById('stepLoc').innerHTML = `<span class="step-ok">✓</span><span>Localização informada manualmente</span>`;
+      await checkDuplicateAndProceed();
+    });
+  }
+
+  async function checkDuplicateAndProceed(){
+    const body = document.getElementById('flowBody');
+    body.innerHTML = `<div class="flow-step"><div class="spinner"></div><span>Verificando reportes próximos...</span></div>`;
+    let nearby = null;
+    try {
+      const snap = await db.collection('reports').where('type','==', flowState.type).get();
+      for (const d of snap.docs){
+        const r = d.data();
+        if (typeof r.lat === 'number' && typeof r.lng === 'number'){
+          const dist = haversine(flowState.location.lat, flowState.location.lng, r.lat, r.lng);
+          if (dist <= RADIUS_M){ nearby = { id: d.id, ...r, dist }; break; }
+        }
+      }
+    } catch(e){
+      body.innerHTML = `<div class="warn-box">Erro ao verificar duplicidade: ${e.message}</div>`;
+      return;
+    }
+
+    if (nearby){
+      const t = TYPES[flowState.type];
+      body.innerHTML = `
+        <div class="warn-box">
+          <strong>Já existe um reporte de "${t.label}" a ${Math.round(nearby.dist)}m deste local</strong>
+          (${timeAgo(nearby.createdAt)}, status: ${STATUS_LABEL[nearby.status]||nearby.status}).<br>
+          Novos reportes no raio de ${RADIUS_M}m são bloqueados para evitar duplicidade.
+        </div>
+        <div class="btn-row">
+          <button class="btn secondary" id="btnCancelDup">Voltar</button>
+        </div>`;
+      document.getElementById('btnCancelDup').addEventListener('click', () => { document.getElementById('flowArea').innerHTML=''; });
+      return;
+    }
+
+    renderPhotoStep();
+  }
+
+  function renderPhotoStep(){
+    const body = document.getElementById('flowBody');
+    body.innerHTML = `
+      <label class="photo-input-label" for="photoInput">📷 <span>Toque para tirar/anexar uma foto</span></label>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+      <img id="photoPreview" class="photo-preview hidden">
+      <textarea id="descInput" rows="2" placeholder="Descrição (opcional)"></textarea>
+      <div class="btn-row">
+        <button class="btn secondary" id="btnCancel">Cancelar</button>
+        <button class="btn" id="btnSubmit" disabled>Enviar reporte</button>
+      </div>`;
+
+    document.getElementById('photoInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      flowState.photoFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = document.getElementById('photoPreview');
+        img.src = reader.result;
+        img.classList.remove('hidden');
+        document.getElementById('btnSubmit').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('btnCancel').addEventListener('click', () => { document.getElementById('flowArea').innerHTML=''; });
+    document.getElementById('btnSubmit').addEventListener('click', submitReport);
+  }
+
+  async function submitReport(){
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    try {
+      let photoUrl = null;
+      if (storage && flowState.photoFile){
+        const filename = 'reports/' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.jpg';
+        const ref = storage.ref().child(filename);
+        await ref.put(flowState.photoFile);
+        photoUrl = await ref.getDownloadURL();
+      }
+      const desc = document.getElementById('descInput').value.trim();
+      await db.collection('reports').add({
+        type: flowState.type,
+        lat: flowState.location.lat,
+        lng: flowState.location.lng,
+        photoUrl: photoUrl,
+        description: desc || null,
+        status: 'pendente',
+        createdAt: new Date().toISOString(),
+      });
+      const t = TYPES[flowState.type];
+      document.getElementById('flowArea').innerHTML = `
+        <div class="card flow success-box">
+          <div class="big">✅</div>
+          <div style="font-weight:700; margin:8px 0 4px;">Reporte enviado!</div>
+          <div style="color:var(--text-muted); font-size:14px;">${t.emoji} ${t.label} registrado com sua localização.</div>
+        </div>`;
+    } catch(e){
+      btn.disabled = false;
+      btn.textContent = 'Enviar reporte';
+      alert('Erro ao enviar: ' + e.message);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

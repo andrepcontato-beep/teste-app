@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>ReportaCidade — Painel</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#f4f5f7; --surface:#ffffff; --surface-2:#eef0f3; --text:#1a1d23; --text-muted:#6b7280;
+    --border:#e2e4e9; --accent:#2563eb; --accent-ink:#ffffff; --danger:#dc2626; --ok:#16a34a;
+    --shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --radius:14px;
+    --buraco:#b45309; --iluminacao:#ca8a04; --acidente:#ea580c; --fogo:#dc2626;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14161a; --surface:#1c1f26; --surface-2:#242830; --text:#eef0f3; --text-muted:#9aa1ac;
+      --border:#2c313b; --shadow:0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14161a; --surface:#1c1f26; --surface-2:#242830; --text:#eef0f3; --text-muted:#9aa1ac;
+    --border:#2c313b; --shadow:0 1px 3px rgba(0,0,0,0.4);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh; padding-bottom:24px;
+  }
+  .app{max-width:720px; margin:0 auto; padding:0 16px;}
+  header.top{
+    position:sticky; top:0; z-index:20; background:var(--bg);
+    padding:16px 0 8px; display:flex; align-items:center; justify-content:space-between;
+  }
+  header.top h1{font-size:18px; margin:0; display:flex; align-items:center; gap:8px;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
+  .hidden{display:none !important;}
+
+  /* login */
+  .login-wrap{display:flex; align-items:center; justify-content:center; min-height:70vh;}
+  .login-card{width:100%; max-width:340px; padding:28px; text-align:center;}
+  .login-card input{
+    width:100%; border:1.5px solid var(--border); border-radius:10px; background:var(--bg);
+    color:var(--text); font-size:14px; padding:11px 12px; margin-top:10px;
+  }
+  .btn{
+    padding:12px 16px; border-radius:10px; border:none; font-weight:600; font-size:14px; cursor:pointer;
+    background:var(--accent); color:var(--accent-ink); width:100%;
+  }
+  .btn.secondary{background:var(--surface-2); color:var(--text);}
+  .btn.danger{background:var(--danger); color:#fff;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-row{display:flex; gap:8px; margin-top:10px;}
+  .btn-row .btn{width:auto; flex:1;}
+  .warn-box{
+    background:color-mix(in srgb, var(--danger) 12%, var(--surface)); border:1px solid var(--danger);
+    border-radius:10px; padding:12px 14px; font-size:13px; margin-top:12px; text-align:left;
+  }
+
+  /* painel */
+  .filters{display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:12px;}
+  .chip{
+    flex-shrink:0; padding:6px 12px; border-radius:999px; border:1.5px solid var(--border);
+    font-size:13px; font-weight:600; cursor:pointer; color:var(--text-muted); background:var(--surface);
+  }
+  .chip.active{background:var(--text); color:var(--bg); border-color:var(--text);}
+
+  .map-wrap{position:relative; width:100%; aspect-ratio:4/3; background:var(--surface-2); border-radius:var(--radius); border:1px solid var(--border); overflow:hidden; margin-bottom:16px;}
+  .map-grid-line{position:absolute; background:var(--border);}
+  .map-pin{
+    position:absolute; width:26px; height:26px; margin-left:-13px; margin-top:-26px;
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+    border-radius:50% 50% 50% 0; transform:rotate(45deg); box-shadow:0 1px 4px rgba(0,0,0,.35);
+    cursor:pointer; border:2px solid var(--surface);
+  }
+  .map-pin span{transform:rotate(-45deg);}
+  .map-empty{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:13px; text-align:center; padding:20px;}
+  .map-caption{font-size:11px; color:var(--text-muted); text-align:center; margin:-10px 0 16px;}
+
+  .popup{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:50;}
+  .popup .card{width:100%; max-width:640px; padding:18px; border-radius:16px 16px 0 0; max-height:80vh; overflow:auto;}
+
+  .report-list{display:flex; flex-direction:column; gap:10px;}
+  .report-item{display:flex; gap:12px; padding:12px; align-items:center; cursor:pointer;}
+  .report-item img{width:56px; height:56px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--surface-2);}
+  .report-item .icon-fallback{width:56px; height:56px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:24px;}
+  .report-item .info{flex:1; min-width:0;}
+  .report-item .title{font-weight:600; font-size:14px; display:flex; align-items:center; gap:6px;}
+  .report-item .meta{font-size:12px; color:var(--text-muted); margin-top:2px;}
+  .status-badge{font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap;}
+  .status-pendente{background:color-mix(in srgb, var(--danger) 18%, transparent); color:var(--danger);}
+  .status-em_andamento{background:color-mix(in srgb, #ca8a04 20%, transparent); color:#a16207;}
+  .status-resolvido{background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok);}
+  .empty-state{text-align:center; padding:40px 20px; color:var(--text-muted); font-size:14px;}
+  .footnote{font-size:11px; color:var(--text-muted); text-align:center; margin-top:20px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>🛠️ Painel — ReportaCidade</h1>
+    <button class="btn secondary" id="btnLogout" style="width:auto; padding:8px 14px; font-size:13px;" hidden>Sair</button>
+  </header>
+
+  <!-- LOGIN -->
+  <div id="loginView" class="login-wrap">
+    <div class="card login-card">
+      <div style="font-size:32px;">🔒</div>
+      <div style="font-weight:700; margin:8px 0 4px;">Acesso restrito</div>
+      <div style="color:var(--text-muted); font-size:13px; margin-bottom:6px;">Entre com a conta autorizada da prefeitura.</div>
+      <input type="email" id="loginEmail" placeholder="E-mail">
+      <input type="password" id="loginPass" placeholder="Senha">
+      <div class="btn-row">
+        <button class="btn" id="btnLogin" style="width:100%;">Entrar</button>
+      </div>
+      <div id="loginError" class="warn-box hidden"></div>
+    </div>
+  </div>
+
+  <!-- PAINEL -->
+  <div id="panelView" class="hidden">
+    <div class="filters" id="filters"></div>
+    <div class="map-wrap" id="mapWrap">
+      <div class="map-empty">Nenhum reporte ainda.</div>
+    </div>
+    <div class="map-caption">Mapa esquemático (posições relativas). Toque em um pin para ver detalhes ou abrir no Google Maps.</div>
+    <div class="report-list" id="reportList"></div>
+  </div>
+
+  <div class="footnote">Painel administrativo — acesso restrito à equipe autorizada.</div>
+</div>
+
+<div id="popupRoot"></div>
+
+<script>
+(function(){
+  // ======================================================================
+  // CONFIGURAÇÃO DO FIREBASE — mesmo projeto/config usado em index.html
+  // ======================================================================
+  const firebaseConfig = {
+    apiKey: "COLE_AQUI_SUA_API_KEY",
+    authDomain: "SEU_PROJETO.firebaseapp.com",
+    projectId: "SEU_PROJETO",
+    storageBucket: "SEU_PROJETO.appspot.com",
+    messagingSenderId: "000000000000",
+    appId: "1:000000000000:web:xxxxxxxxxxxxxxxxxxxxxx",
+  };
+  // ======================================================================
+
+  const TYPES = {
+    buraco:      { label:'Buraco na via',       emoji:'🕳️', color:'var(--buraco)' },
+    iluminacao:  { label:'Iluminação pública',   emoji:'💡', color:'var(--iluminacao)' },
+    acidente:    { label:'Acidente',             emoji:'🚧', color:'var(--acidente)' },
+    fogo:        { label:'Incêndio',             emoji:'🔥', color:'var(--fogo)' },
+  };
+  const STATUS_LABEL = { pendente:'Pendente', em_andamento:'Em andamento', resolvido:'Resolvido' };
+
+  let db = null;
+  let reports = [];
+  let activeFilter = 'todos';
+  let unsubscribe = null;
+
+  function timeAgo(iso){
+    const s = (Date.now() - new Date(iso).getTime())/1000;
+    if (s < 60) return 'agora mesmo';
+    if (s < 3600) return Math.floor(s/60)+' min atrás';
+    if (s < 86400) return Math.floor(s/3600)+' h atrás';
+    return Math.floor(s/86400)+' d atrás';
+  }
+
+  function init(){
+    if (firebaseConfig.apiKey === "COLE_AQUI_SUA_API_KEY"){
+      document.getElementById('loginError').textContent = 'Firebase não configurado — preencha firebaseConfig neste arquivo.';
+      document.getElementById('loginError').classList.remove('hidden');
+      return;
+    }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+
+    firebase.auth().onAuthStateChanged(user => {
+      if (user){
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('panelView').classList.remove('hidden');
+        document.getElementById('btnLogout').hidden = false;
+        renderFilters();
+        if (!unsubscribe) subscribeReports();
+      } else {
+        document.getElementById('loginView').classList.remove('hidden');
+        document.getElementById('panelView').classList.add('hidden');
+        document.getElementById('btnLogout').hidden = true;
+        if (unsubscribe){ unsubscribe(); unsubscribe = null; }
+      }
+    });
+  }
+
+  document.getElementById('btnLogin').addEventListener('click', doLogin);
+  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+
+  function doLogin(){
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPass').value;
+    const errBox = document.getElementById('loginError');
+    errBox.classList.add('hidden');
+    const btn = document.getElementById('btnLogin');
+    btn.disabled = true; btn.textContent = 'Entrando...';
+    firebase.auth().signInWithEmailAndPassword(email, pass)
+      .catch(e => {
+        errBox.textContent = 'Não foi possível entrar: e-mail ou senha incorretos.';
+        errBox.classList.remove('hidden');
+      })
+      .finally(() => { btn.disabled = false; btn.textContent = 'Entrar'; });
+  }
+
+  document.getElementById('btnLogout').addEventListener('click', () => firebase.auth().signOut());
+
+  function subscribeReports(){
+    unsubscribe = db.collection('reports').orderBy('createdAt','desc').limit(300).onSnapshot(
+      snap => {
+        reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderMap();
+        renderList();
+      },
+      err => { console.error('db error', err); }
+    );
+  }
+
+  function renderFilters(){
+    const wrap = document.getElementById('filters');
+    const opts = [['todos','Todos'], ...Object.entries(TYPES).map(([k,t])=>[k, t.emoji+' '+t.label])];
+    wrap.innerHTML = '';
+    opts.forEach(([key,label]) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (key===activeFilter ? ' active' : '');
+      chip.textContent = label;
+      chip.addEventListener('click', () => { activeFilter = key; renderFilters(); renderMap(); renderList(); });
+      wrap.appendChild(chip);
+    });
+  }
+
+  function filteredReports(){
+    return activeFilter==='todos' ? reports : reports.filter(r => r.type===activeFilter);
+  }
+
+  function renderMap(){
+    const wrap = document.getElementById('mapWrap');
+    const data = filteredReports().filter(r => typeof r.lat==='number' && typeof r.lng==='number');
+    wrap.innerHTML = '';
+    if (data.length===0){
+      wrap.innerHTML = '<div class="map-empty">Nenhum reporte para exibir.</div>';
+      return;
+    }
+    let minLat=Math.min(...data.map(r=>r.lat)), maxLat=Math.max(...data.map(r=>r.lat));
+    let minLng=Math.min(...data.map(r=>r.lng)), maxLng=Math.max(...data.map(r=>r.lng));
+    const padLat=(maxLat-minLat)||0.001, padLng=(maxLng-minLng)||0.001;
+    minLat-=padLat*0.2; maxLat+=padLat*0.2; minLng-=padLng*0.2; maxLng+=padLng*0.2;
+
+    for (let i=1;i<4;i++){
+      const v = document.createElement('div');
+      v.className='map-grid-line'; v.style.left=(i*25)+'%'; v.style.top='0'; v.style.width='1px'; v.style.height='100%';
+      wrap.appendChild(v);
+      const h = document.createElement('div');
+      h.className='map-grid-line'; h.style.top=(i*25)+'%'; h.style.left='0'; h.style.height='1px'; h.style.width='100%';
+      wrap.appendChild(h);
+    }
+
+    data.forEach(r => {
+      const xPct = ((r.lng - minLng) / (maxLng - minLng)) * 100;
+      const yPct = 100 - ((r.lat - minLat) / (maxLat - minLat)) * 100;
+      const t = TYPES[r.type] || { emoji:'📍', color:'var(--accent)' };
+      const pin = document.createElement('div');
+      pin.className = 'map-pin';
+      pin.style.left = xPct + '%';
+      pin.style.top = yPct + '%';
+      pin.style.background = t.color;
+      pin.innerHTML = `<span>${t.emoji}</span>`;
+      pin.addEventListener('click', () => openPopup(r));
+      wrap.appendChild(pin);
+    });
+  }
+
+  function renderList(){
+    const list = document.getElementById('reportList');
+    const data = filteredReports();
+    if (data.length===0){
+      list.innerHTML = '<div class="empty-state">Nenhum reporte encontrado.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.forEach(r => {
+      const t = TYPES[r.type] || { emoji:'📍', label:r.type, color:'var(--accent)' };
+      const item = document.createElement('div');
+      item.className = 'card report-item';
+      item.innerHTML = `
+        ${ r.photoUrl ? `<img src="${r.photoUrl}">` : `<div class="icon-fallback" style="background:${t.color}22;">${t.emoji}</div>` }
+        <div class="info">
+          <div class="title">${t.emoji} ${t.label}</div>
+          <div class="meta">${timeAgo(r.createdAt)} · ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</div>
+        </div>
+        <span class="status-badge status-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>`;
+      item.addEventListener('click', () => openPopup(r));
+      list.appendChild(item);
+    });
+  }
+
+  function openPopup(r){
+    const t = TYPES[r.type] || { emoji:'📍', label:r.type, color:'var(--accent)' };
+    const root = document.getElementById('popupRoot');
+    const mapsUrl = `https://www.google.com/maps?q=${r.lat},${r.lng}`;
+    root.innerHTML = `
+      <div class="popup" id="popupOverlay">
+        <div class="card">
+          <div style="font-weight:700; font-size:16px; margin-bottom:8px;">${t.emoji} ${t.label}</div>
+          ${ r.photoUrl ? `<img src="${r.photoUrl}" style="width:100%; border-radius:10px; max-height:260px; object-fit:cover;">` : '' }
+          ${ r.description ? `<div style="margin-top:10px; font-size:14px;">${r.description}</div>` : '' }
+          <div class="meta" style="margin-top:10px; font-size:12px; color:var(--text-muted);">
+            Reportado ${timeAgo(r.createdAt)}<br>
+            Coordenadas: ${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}
+          </div>
+          <div style="margin-top:12px;">
+            <label style="font-size:12px; color:var(--text-muted);">Status</label>
+            <div class="btn-row">
+              <button class="btn secondary" data-status="pendente">Pendente</button>
+              <button class="btn secondary" data-status="em_andamento">Em andamento</button>
+              <button class="btn secondary" data-status="resolvido">Resolvido</button>
+            </div>
+          </div>
+          <div class="btn-row">
+            <a class="btn secondary" style="text-align:center; text-decoration:none;" href="${mapsUrl}" target="_blank" rel="noopener">Abrir no Google Maps</a>
+            <button class="btn" id="btnClosePopup">Fechar</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('popupOverlay').addEventListener('click', (e) => { if (e.target.id==='popupOverlay') root.innerHTML=''; });
+    document.getElementById('btnClosePopup').addEventListener('click', () => root.innerHTML='');
+    root.querySelectorAll('[data-status]').forEach(b => {
+      b.addEventListener('click', async () => {
+        try { await db.collection('reports').doc(r.id).update({ status: b.dataset.status }); root.innerHTML=''; }
+        catch(e){ alert('Erro ao atualizar status: '+e.message); }
+      });
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
