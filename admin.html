@@ -168,6 +168,19 @@
   let reports = [];
   let activeFilter = 'todos';
   let unsubscribe = null;
+  let isAdmin = false;
+  let hideResolved = false;
+
+  function writeLog(action, extra){
+    const user = firebase.auth().currentUser;
+    db.collection('logs').add({
+      action,
+      ...extra,
+      userEmail: user ? user.email : null,
+      userId: user ? user.uid : null,
+      timestamp: new Date().toISOString(),
+    }).catch(e => console.error('log error', e));
+  }
 
   function timeAgo(iso){
     const s = (Date.now() - new Date(iso).getTime())/1000;
@@ -187,17 +200,22 @@
     db = firebase.firestore();
     storage = firebase.storage();
 
-    firebase.auth().onAuthStateChanged(user => {
+    firebase.auth().onAuthStateChanged(async user => {
       if (user){
         document.getElementById('loginView').classList.add('hidden');
         document.getElementById('panelView').classList.remove('hidden');
         document.getElementById('btnLogout').hidden = false;
+        try {
+          const adminDoc = await db.collection('admins').doc(user.uid).get();
+          isAdmin = adminDoc.exists;
+        } catch(e){ isAdmin = false; }
         renderFilters();
         if (!unsubscribe) subscribeReports();
       } else {
         document.getElementById('loginView').classList.remove('hidden');
         document.getElementById('panelView').classList.add('hidden');
         document.getElementById('btnLogout').hidden = true;
+        isAdmin = false;
         if (unsubscribe){ unsubscribe(); unsubscribe = null; }
       }
     });
@@ -245,10 +263,17 @@
       chip.addEventListener('click', () => { activeFilter = key; renderFilters(); renderMap(); renderList(); });
       wrap.appendChild(chip);
     });
+    const hideChip = document.createElement('div');
+    hideChip.className = 'chip' + (hideResolved ? ' active' : '');
+    hideChip.textContent = (hideResolved ? '✓ ' : '') + 'Ocultar resolvidos';
+    hideChip.addEventListener('click', () => { hideResolved = !hideResolved; renderFilters(); renderMap(); renderList(); });
+    wrap.appendChild(hideChip);
   }
 
   function filteredReports(){
-    return activeFilter==='todos' ? reports : reports.filter(r => r.type===activeFilter);
+    let data = activeFilter==='todos' ? reports : reports.filter(r => r.type===activeFilter);
+    if (hideResolved) data = data.filter(r => r.status !== 'resolvido');
+    return data;
   }
 
   const PIRACANJUBA_CENTER = [-17.302, -49.017];
@@ -287,6 +312,7 @@
         iconAnchor: [15, 30],
       });
       const marker = L.marker([r.lat, r.lng], { icon }).addTo(markersLayer);
+      if (r.status === 'resolvido') marker.setOpacity(0.35);
       marker.on('click', () => openPopup(r));
       bounds.push([r.lat, r.lng]);
     });
@@ -309,6 +335,7 @@
       const t = TYPES[r.type] || { emoji:'📍', label:r.type, color:'var(--accent)' };
       const item = document.createElement('div');
       item.className = 'card report-item';
+      if (r.status === 'resolvido') item.style.opacity = '0.4';
       item.innerHTML = `
         ${ r.photoUrl ? `<img src="${r.photoUrl}">` : `<div class="icon-fallback" style="background:${t.color}22;">${t.emoji}</div>` }
         <div class="info">
@@ -377,30 +404,38 @@
               <a class="btn secondary" style="text-align:center; text-decoration:none;" href="${mapsUrl}" target="_blank" rel="noopener">Abrir no Google Maps</a>
               <button class="btn" id="btnClosePopup">Fechar</button>
             </div>
+            ${ isAdmin ? `
             <div class="btn-row">
               <button class="btn danger" id="btnDeleteReport">🗑️ Excluir reporte</button>
-            </div>
+            </div>` : '' }
           </div>
         </div>
       </div>`;
     document.getElementById('popupOverlay').addEventListener('click', (e) => { if (e.target.id==='popupOverlay') root.innerHTML=''; });
     document.getElementById('btnClosePopup').addEventListener('click', () => root.innerHTML='');
     makeDraggable(document.getElementById('popupCard'), document.getElementById('popupDragHandle'));
-    document.getElementById('btnDeleteReport').addEventListener('click', async () => {
-      if (!confirm('Excluir este reporte permanentemente? Essa ação não pode ser desfeita.')) return;
-      try {
-        await db.collection('reports').doc(r.id).delete();
-        if (storage && r.photoUrl){
-          try { await storage.refFromURL(r.photoUrl).delete(); } catch(e){ /* ignora se a foto já não existir */ }
+    if (isAdmin){
+      document.getElementById('btnDeleteReport').addEventListener('click', async () => {
+        if (!confirm('Excluir este reporte permanentemente? Essa ação não pode ser desfeita.')) return;
+        try {
+          writeLog('delete', { reportId: r.id, type: r.type, lat: r.lat, lng: r.lng });
+          await db.collection('reports').doc(r.id).delete();
+          if (storage && r.photoUrl){
+            try { await storage.refFromURL(r.photoUrl).delete(); } catch(e){ /* ignora se a foto já não existir */ }
+          }
+          root.innerHTML = '';
+        } catch(e){
+          alert('Erro ao excluir: ' + e.message);
         }
-        root.innerHTML = '';
-      } catch(e){
-        alert('Erro ao excluir: ' + e.message);
-      }
-    });
+      });
+    }
     root.querySelectorAll('[data-status]').forEach(b => {
       b.addEventListener('click', async () => {
-        try { await db.collection('reports').doc(r.id).update({ status: b.dataset.status }); root.innerHTML=''; }
+        try {
+          await db.collection('reports').doc(r.id).update({ status: b.dataset.status });
+          writeLog('status_change', { reportId: r.id, from: r.status, to: b.dataset.status });
+          root.innerHTML = '';
+        }
         catch(e){ alert('Erro ao atualizar status: '+e.message); }
       });
     });
