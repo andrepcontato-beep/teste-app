@@ -3,20 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>ReportaCidade — Painel</title>
+<title>ReportaCidade</title>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root{
     --bg:#f4f5f7; --surface:#ffffff; --surface-2:#eef0f3; --text:#1a1d23; --text-muted:#6b7280;
     --border:#e2e4e9; --accent:#2563eb; --accent-ink:#ffffff; --danger:#dc2626; --ok:#16a34a;
     --shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
     --radius:14px;
-    --buraco:#b45309; --iluminacao:#ca8a04; --acidente:#ea580c; --fogo:#dc2626;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -34,7 +30,7 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     min-height:100vh; padding-bottom:24px;
   }
-  .app{max-width:720px; margin:0 auto; padding:0 16px;}
+  .app{max-width:640px; margin:0 auto; padding:0 16px;}
   header.top{
     position:sticky; top:0; z-index:20; background:var(--bg);
     padding:16px 0 8px; display:flex; align-items:center; justify-content:space-between;
@@ -43,104 +39,62 @@
   .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
   .hidden{display:none !important;}
 
-  /* login */
-  .login-wrap{display:flex; align-items:center; justify-content:center; min-height:70vh;}
-  .login-card{width:100%; max-width:340px; padding:28px; text-align:center;}
-  .login-card input{
-    width:100%; border:1.5px solid var(--border); border-radius:10px; background:var(--bg);
-    color:var(--text); font-size:14px; padding:11px 12px; margin-top:10px;
+  .type-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
+  .type-btn{
+    padding:18px 10px; text-align:center; cursor:pointer; display:flex; flex-direction:column;
+    align-items:center; gap:6px; font-weight:600; font-size:14px; border:1.5px solid var(--border);
+  }
+  .type-btn .emoji{font-size:28px;}
+  .type-btn:active{transform:scale(0.98);}
+
+  .flow{padding:18px; margin-bottom:16px;}
+  .flow-step{display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:14px; color:var(--text-muted);}
+  .spinner{width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .step-ok{color:var(--ok);} .step-err{color:var(--danger);}
+
+  .warn-box{
+    background:color-mix(in srgb, var(--danger) 12%, var(--surface)); border:1px solid var(--danger);
+    border-radius:10px; padding:12px 14px; font-size:14px; margin-top:6px;
   }
   .btn{
     padding:12px 16px; border-radius:10px; border:none; font-weight:600; font-size:14px; cursor:pointer;
     background:var(--accent); color:var(--accent-ink); width:100%;
   }
   .btn.secondary{background:var(--surface-2); color:var(--text);}
-  .btn.danger{background:var(--danger); color:#fff;}
   .btn:disabled{opacity:.5; cursor:not-allowed;}
   .btn-row{display:flex; gap:8px; margin-top:10px;}
   .btn-row .btn{width:auto; flex:1;}
-  .warn-box{
-    background:color-mix(in srgb, var(--danger) 12%, var(--surface)); border:1px solid var(--danger);
-    border-radius:10px; padding:12px 14px; font-size:13px; margin-top:12px; text-align:left;
+
+  textarea, .photo-input-label{
+    width:100%; border:1.5px solid var(--border); border-radius:10px; background:var(--bg);
+    color:var(--text); font-family:inherit; font-size:14px; padding:10px; margin-top:10px;
   }
+  .photo-input-label{display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; padding:16px; text-align:center;}
+  .photo-preview{width:100%; border-radius:10px; margin-top:10px; max-height:220px; object-fit:cover; display:block;}
 
-  /* painel */
-  .filters{display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:12px;}
-  .chip{
-    flex-shrink:0; padding:6px 12px; border-radius:999px; border:1.5px solid var(--border);
-    font-size:13px; font-weight:600; cursor:pointer; color:var(--text-muted); background:var(--surface);
-  }
-  .chip.active{background:var(--text); color:var(--bg); border-color:var(--text);}
-
-  .map-wrap{position:relative; width:100%; aspect-ratio:4/3; background:var(--surface-2); border-radius:var(--radius); border:1px solid var(--border); overflow:hidden; margin-bottom:16px;}
-  .map-grid-line{position:absolute; background:var(--border);}
-  .map-pin{
-    position:absolute; width:26px; height:26px; margin-left:-13px; margin-top:-26px;
-    display:flex; align-items:center; justify-content:center; font-size:14px;
-    border-radius:50% 50% 50% 0; transform:rotate(45deg); box-shadow:0 1px 4px rgba(0,0,0,.35);
-    cursor:pointer; border:2px solid var(--surface);
-  }
-  .map-pin span{transform:rotate(-45deg);}
-  .map-empty{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:13px; text-align:center; padding:20px;}
-  .map-caption{font-size:11px; color:var(--text-muted); text-align:center; margin:-10px 0 16px;}
-
-  .popup{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:9999;}
-  .popup .card{width:100%; max-width:640px; padding:18px; border-radius:16px 16px 0 0; max-height:80vh; overflow:auto;}
-
-  .report-list{display:flex; flex-direction:column; gap:10px;}
-  .report-item{display:flex; gap:12px; padding:12px; align-items:center; cursor:pointer;}
-  .report-item img{width:56px; height:56px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--surface-2);}
-  .report-item .icon-fallback{width:56px; height:56px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:24px;}
-  .report-item .info{flex:1; min-width:0;}
-  .report-item .title{font-weight:600; font-size:14px; display:flex; align-items:center; gap:6px;}
-  .report-item .meta{font-size:12px; color:var(--text-muted); margin-top:2px;}
-  .status-badge{font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap;}
-  .status-pendente{background:color-mix(in srgb, var(--danger) 18%, transparent); color:var(--danger);}
-  .status-em_andamento{background:color-mix(in srgb, #ca8a04 20%, transparent); color:#a16207;}
-  .status-resolvido{background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok);}
-  .empty-state{text-align:center; padding:40px 20px; color:var(--text-muted); font-size:14px;}
+  .success-box{text-align:center; padding:8px 0;}
+  .success-box .big{font-size:40px;}
   .footnote{font-size:11px; color:var(--text-muted); text-align:center; margin-top:20px; line-height:1.5;}
 </style>
 </head>
 <body>
 <div class="app">
   <header class="top">
-    <h1>🛠️ Painel — ReportaCidade</h1>
-    <button class="btn secondary" id="btnLogout" style="width:auto; padding:8px 14px; font-size:13px;" hidden>Sair</button>
+    <h1>📍 ReportaCidade</h1>
   </header>
 
-  <!-- LOGIN -->
-  <div id="loginView" class="login-wrap">
-    <div class="card login-card">
-      <div style="font-size:32px;">🔒</div>
-      <div style="font-weight:700; margin:8px 0 4px;">Acesso restrito</div>
-      <div style="color:var(--text-muted); font-size:13px; margin-bottom:6px;">Entre com a conta autorizada da prefeitura.</div>
-      <input type="email" id="loginEmail" placeholder="E-mail">
-      <input type="password" id="loginPass" placeholder="Senha">
-      <div class="btn-row">
-        <button class="btn" id="btnLogin" style="width:100%;">Entrar</button>
-      </div>
-      <div id="loginError" class="warn-box hidden"></div>
-    </div>
-  </div>
+  <div id="typeGrid" class="type-grid"></div>
+  <div id="flowArea"></div>
 
-  <!-- PAINEL -->
-  <div id="panelView" class="hidden">
-    <div class="filters" id="filters"></div>
-    <div class="map-wrap" id="mapWrap"></div>
-    <div class="map-caption">Toque em um pin para ver detalhes ou abrir no Google Maps.</div>
-    <div class="report-list" id="reportList"></div>
-  </div>
-
-  <div class="footnote">Painel administrativo — acesso restrito à equipe autorizada.</div>
+  <div class="footnote">ReportaCidade — reportes de problemas urbanos.</div>
 </div>
-
-<div id="popupRoot"></div>
 
 <script>
 (function(){
   // ======================================================================
-  // CONFIGURAÇÃO DO FIREBASE — mesmo projeto/config usado em index.html
+  // CONFIGURAÇÃO DO FIREBASE — preencha com os dados do SEU projeto
+  // (mesmo valor usado em admin.html — é o mesmo projeto/banco)
   // ======================================================================
   const firebaseConfig = {
     apiKey: "AIzaSyCVd_SelW0r9GYUq6RRfaSRZcI9N8JXocQ",
@@ -153,18 +107,23 @@
   // ======================================================================
 
   const TYPES = {
-    buraco:      { label:'Buraco na via',       emoji:'🕳️', color:'var(--buraco)' },
-    iluminacao:  { label:'Iluminação pública',   emoji:'💡', color:'var(--iluminacao)' },
-    acidente:    { label:'Acidente',             emoji:'🚧', color:'var(--acidente)' },
-    fogo:        { label:'Incêndio',             emoji:'🔥', color:'var(--fogo)' },
+    buraco:      { label:'Buraco na via',       emoji:'🕳️' },
+    iluminacao:  { label:'Iluminação pública',   emoji:'💡' },
+    acidente:    { label:'Acidente',             emoji:'🚧' },
+    fogo:        { label:'Incêndio',             emoji:'🔥' },
   };
+  const RADIUS_M = 20;
   const STATUS_LABEL = { pendente:'Pendente', em_andamento:'Em andamento', resolvido:'Resolvido' };
 
   let db = null, storage = null;
-  let reports = [];
-  let activeFilter = 'todos';
-  let unsubscribe = null;
 
+  function haversine(lat1, lng1, lat2, lng2){
+    const R = 6371000;
+    const toRad = d => d * Math.PI/180;
+    const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
   function timeAgo(iso){
     const s = (Date.now() - new Date(iso).getTime())/1000;
     if (s < 60) return 'agora mesmo';
@@ -172,202 +131,237 @@
     if (s < 86400) return Math.floor(s/3600)+' h atrás';
     return Math.floor(s/86400)+' d atrás';
   }
+  function getLocation(){
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('Geolocalização não suportada neste navegador.'));
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+        err => reject(new Error(err.message || 'Não foi possível obter a localização.')),
+        { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+      );
+    });
+  }
 
   function init(){
     if (firebaseConfig.apiKey === "COLE_AQUI_SUA_API_KEY"){
-      document.getElementById('loginError').textContent = 'Firebase não configurado — preencha firebaseConfig neste arquivo.';
-      document.getElementById('loginError').classList.remove('hidden');
+      document.getElementById('flowArea').innerHTML =
+        '<div class="warn-box"><strong>Firebase não configurado.</strong> Preencha o objeto <code>firebaseConfig</code> neste arquivo (veja INSTRUCOES-DEPLOY.md).</div>';
+      renderTypeGrid();
       return;
     }
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    storage = firebase.storage();
-
-    firebase.auth().onAuthStateChanged(user => {
-      if (user){
-        document.getElementById('loginView').classList.add('hidden');
-        document.getElementById('panelView').classList.remove('hidden');
-        document.getElementById('btnLogout').hidden = false;
-        renderFilters();
-        if (!unsubscribe) subscribeReports();
-      } else {
-        document.getElementById('loginView').classList.remove('hidden');
-        document.getElementById('panelView').classList.add('hidden');
-        document.getElementById('btnLogout').hidden = true;
-        if (unsubscribe){ unsubscribe(); unsubscribe = null; }
-      }
-    });
-  }
-
-  document.getElementById('btnLogin').addEventListener('click', doLogin);
-  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
-
-  function doLogin(){
-    const email = document.getElementById('loginEmail').value.trim();
-    const pass = document.getElementById('loginPass').value;
-    const errBox = document.getElementById('loginError');
-    errBox.classList.add('hidden');
-    const btn = document.getElementById('btnLogin');
-    btn.disabled = true; btn.textContent = 'Entrando...';
-    firebase.auth().signInWithEmailAndPassword(email, pass)
-      .catch(e => {
-        errBox.textContent = 'Não foi possível entrar: e-mail ou senha incorretos.';
-        errBox.classList.remove('hidden');
-      })
-      .finally(() => { btn.disabled = false; btn.textContent = 'Entrar'; });
-  }
-
-  document.getElementById('btnLogout').addEventListener('click', () => firebase.auth().signOut());
-
-  function subscribeReports(){
-    unsubscribe = db.collection('reports').orderBy('createdAt','desc').limit(300).onSnapshot(
-      snap => {
-        reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderMap();
-        renderList();
-      },
-      err => { console.error('db error', err); }
-    );
-  }
-
-  function renderFilters(){
-    const wrap = document.getElementById('filters');
-    const opts = [['todos','Todos'], ...Object.entries(TYPES).map(([k,t])=>[k, t.emoji+' '+t.label])];
-    wrap.innerHTML = '';
-    opts.forEach(([key,label]) => {
-      const chip = document.createElement('div');
-      chip.className = 'chip' + (key===activeFilter ? ' active' : '');
-      chip.textContent = label;
-      chip.addEventListener('click', () => { activeFilter = key; renderFilters(); renderMap(); renderList(); });
-      wrap.appendChild(chip);
-    });
-  }
-
-  function filteredReports(){
-    return activeFilter==='todos' ? reports : reports.filter(r => r.type===activeFilter);
-  }
-
-  const PIRACANJUBA_CENTER = [-17.302, -49.017];
-  let leafletMap = null;
-  let markersLayer = null;
-
-  function ensureMap(){
-    if (leafletMap) return;
-    leafletMap = L.map('mapWrap').setView(PIRACANJUBA_CENTER, 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(leafletMap);
-    markersLayer = L.layerGroup().addTo(leafletMap);
-  }
-
-  function renderMap(){
-    ensureMap();
-    setTimeout(() => leafletMap.invalidateSize(), 0);
-    const data = filteredReports().filter(r => typeof r.lat==='number' && typeof r.lng==='number');
-    markersLayer.clearLayers();
-    if (data.length === 0){
-      leafletMap.setView(PIRACANJUBA_CENTER, 13);
-      return;
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      storage = firebase.storage();
+    } catch(e){
+      document.getElementById('flowArea').innerHTML = `<div class="warn-box">Erro ao conectar: ${e.message}</div>`;
     }
-    const bounds = [];
-    data.forEach(r => {
-      const t = TYPES[r.type] || { emoji:'📍', color:'var(--accent)' };
-      const icon = L.divIcon({
-        html: `<div style="background:${t.color};width:30px;height:30px;border-radius:50% 50% 50% 0;
-                transform:rotate(45deg); display:flex; align-items:center; justify-content:center;
-                border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4);">
-                <span style="transform:rotate(-45deg); font-size:15px;">${t.emoji}</span></div>`,
-        className: '',
-        iconSize: [30, 30],
-        iconAnchor: [15, 30],
-      });
-      const marker = L.marker([r.lat, r.lng], { icon }).addTo(markersLayer);
-      marker.on('click', () => openPopup(r));
-      bounds.push([r.lat, r.lng]);
-    });
-    if (bounds.length === 1){
-      leafletMap.setView(bounds[0], 16);
-    } else {
-      leafletMap.fitBounds(bounds, { padding: [30, 30] });
-    }
+    renderTypeGrid();
   }
 
-  function renderList(){
-    const list = document.getElementById('reportList');
-    const data = filteredReports();
-    if (data.length===0){
-      list.innerHTML = '<div class="empty-state">Nenhum reporte encontrado.</div>';
-      return;
-    }
-    list.innerHTML = '';
-    data.forEach(r => {
-      const t = TYPES[r.type] || { emoji:'📍', label:r.type, color:'var(--accent)' };
-      const item = document.createElement('div');
-      item.className = 'card report-item';
-      item.innerHTML = `
-        ${ r.photoUrl ? `<img src="${r.photoUrl}">` : `<div class="icon-fallback" style="background:${t.color}22;">${t.emoji}</div>` }
-        <div class="info">
-          <div class="title">${t.emoji} ${t.label}</div>
-          <div class="meta">${timeAgo(r.createdAt)} · ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</div>
-        </div>
-        <span class="status-badge status-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>`;
-      item.addEventListener('click', () => openPopup(r));
-      list.appendChild(item);
+  function renderTypeGrid(){
+    const grid = document.getElementById('typeGrid');
+    grid.innerHTML = '';
+    Object.entries(TYPES).forEach(([key, t]) => {
+      const btn = document.createElement('div');
+      btn.className = 'card type-btn';
+      btn.innerHTML = `<span class="emoji">${t.emoji}</span><span>${t.label}</span>`;
+      btn.addEventListener('click', () => startFlow(key));
+      grid.appendChild(btn);
     });
   }
 
-  function openPopup(r){
-    const t = TYPES[r.type] || { emoji:'📍', label:r.type, color:'var(--accent)' };
-    const root = document.getElementById('popupRoot');
-    const mapsUrl = `https://www.google.com/maps?q=${r.lat},${r.lng}`;
-    root.innerHTML = `
-      <div class="popup" id="popupOverlay">
-        <div class="card">
-          <div style="font-weight:700; font-size:16px; margin-bottom:8px;">${t.emoji} ${t.label}</div>
-          ${ r.photoUrl ? `<img src="${r.photoUrl}" style="width:100%; border-radius:10px; max-height:260px; object-fit:cover;">` : '' }
-          ${ r.description ? `<div style="margin-top:10px; font-size:14px;">${r.description}</div>` : '' }
-          <div class="meta" style="margin-top:10px; font-size:12px; color:var(--text-muted);">
-            Reportado ${timeAgo(r.createdAt)}<br>
-            Coordenadas: ${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}
-          </div>
-          <div style="margin-top:12px;">
-            <label style="font-size:12px; color:var(--text-muted);">Status</label>
-            <div class="btn-row">
-              <button class="btn secondary" data-status="pendente">Pendente</button>
-              <button class="btn secondary" data-status="em_andamento">Em andamento</button>
-              <button class="btn secondary" data-status="resolvido">Resolvido</button>
-            </div>
-          </div>
-          <div class="btn-row">
-            <a class="btn secondary" style="text-align:center; text-decoration:none;" href="${mapsUrl}" target="_blank" rel="noopener">Abrir no Google Maps</a>
-            <button class="btn" id="btnClosePopup">Fechar</button>
-          </div>
-          <div class="btn-row">
-            <button class="btn danger" id="btnDeleteReport">🗑️ Excluir reporte</button>
-          </div>
-        </div>
+  let flowState = null;
+
+  async function startFlow(typeKey){
+    flowState = { type: typeKey, location: null, photoFile: null };
+    const area = document.getElementById('flowArea');
+    const t = TYPES[typeKey];
+    area.innerHTML = `
+      <div class="card flow">
+        <div style="font-weight:700; margin-bottom:12px;">${t.emoji} ${t.label}</div>
+        <div class="flow-step" id="stepLoc"><div class="spinner"></div><span>Obtendo sua localização exata...</span></div>
+        <div id="flowBody"></div>
       </div>`;
-    document.getElementById('popupOverlay').addEventListener('click', (e) => { if (e.target.id==='popupOverlay') root.innerHTML=''; });
-    document.getElementById('btnClosePopup').addEventListener('click', () => root.innerHTML='');
-    document.getElementById('btnDeleteReport').addEventListener('click', async () => {
-      if (!confirm('Excluir este reporte permanentemente? Essa ação não pode ser desfeita.')) return;
+
+    if (!db){
+      document.getElementById('stepLoc').innerHTML = '<span class="step-err">✕</span><span>Banco de dados indisponível — não é possível reportar agora.</span>';
+      return;
+    }
+
+    try {
+      let loc = await getLocation();
+      // Se a primeira leitura vier imprecisa, espera um instante e tenta refinar
+      if (loc.accuracy > 30){
+        document.getElementById('stepLoc').innerHTML = `<div class="spinner"></div><span>Sinal de GPS impreciso (~${Math.round(loc.accuracy)}m), refinando...</span>`;
+        await new Promise(r => setTimeout(r, 2500));
+        try {
+          const loc2 = await getLocation();
+          if (loc2.accuracy < loc.accuracy) loc = loc2;
+        } catch(e2){ /* mantém a primeira leitura se a segunda falhar */ }
+      }
+      flowState.location = loc;
+      const precisionNote = loc.accuracy > 30
+        ? ` <span style="color:var(--danger);">(precisão baixa: ~${Math.round(loc.accuracy)}m — pode estar sob teto, nuvens ou com "localização precisa" desligada no celular)</span>`
+        : ` (precisão: ~${Math.round(loc.accuracy)}m)`;
+      document.getElementById('stepLoc').innerHTML = `<span class="step-ok">✓</span><span>Localização obtida${precisionNote}</span> <a href="#" id="linkRetryLoc" style="font-size:12px; white-space:nowrap;">🔄 tentar de novo</a>`;
+      document.getElementById('linkRetryLoc').addEventListener('click', (e) => { e.preventDefault(); startFlow(flowState.type); });
+      await checkDuplicateAndProceed();
+    } catch(err){
+      document.getElementById('stepLoc').innerHTML = `<span class="step-err">✕</span><span>${err.message}</span>`;
+      renderManualLocationFallback();
+    }
+  }
+
+  function renderManualLocationFallback(){
+    const body = document.getElementById('flowBody');
+    body.innerHTML = `
+      <div class="warn-box">
+        Não foi possível obter a localização automaticamente. Verifique se a permissão de localização
+        está liberada nas configurações do navegador, ou informe as coordenadas manualmente abaixo
+        (no Google Maps: toque e segure o local no mapa para ver latitude e longitude).
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <div style="flex:1;">
+          <label style="font-size:12px; color:var(--text-muted);">Latitude</label>
+          <textarea id="manualLat" rows="1" placeholder="-16.4382"></textarea>
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px; color:var(--text-muted);">Longitude</label>
+          <textarea id="manualLng" rows="1" placeholder="-49.0524"></textarea>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" id="btnRetryGeo">Tentar GPS de novo</button>
+        <button class="btn" id="btnUseManual">Usar estas coordenadas</button>
+      </div>`;
+
+    document.getElementById('btnRetryGeo').addEventListener('click', async () => {
+      document.getElementById('stepLoc').innerHTML = `<div class="spinner"></div><span>Obtendo sua localização exata...</span>`;
       try {
-        await db.collection('reports').doc(r.id).delete();
-        if (storage && r.photoUrl){
-          try { await storage.refFromURL(r.photoUrl).delete(); } catch(e){ /* ignora se a foto já não existir */ }
-        }
-        root.innerHTML = '';
-      } catch(e){
-        alert('Erro ao excluir: ' + e.message);
+        const loc = await getLocation();
+        flowState.location = loc;
+        document.getElementById('stepLoc').innerHTML = `<span class="step-ok">✓</span><span>Localização obtida (±precisão do GPS)</span>`;
+        await checkDuplicateAndProceed();
+      } catch(err){
+        document.getElementById('stepLoc').innerHTML = `<span class="step-err">✕</span><span>${err.message}</span>`;
+        renderManualLocationFallback();
       }
     });
-    root.querySelectorAll('[data-status]').forEach(b => {
-      b.addEventListener('click', async () => {
-        try { await db.collection('reports').doc(r.id).update({ status: b.dataset.status }); root.innerHTML=''; }
-        catch(e){ alert('Erro ao atualizar status: '+e.message); }
-      });
+
+    document.getElementById('btnUseManual').addEventListener('click', async () => {
+      const lat = parseFloat(document.getElementById('manualLat').value.trim());
+      const lng = parseFloat(document.getElementById('manualLng').value.trim());
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180){
+        alert('Informe latitude e longitude válidas (ex: -16.4382 e -49.0524).');
+        return;
+      }
+      flowState.location = { lat, lng };
+      document.getElementById('stepLoc').innerHTML = `<span class="step-ok">✓</span><span>Localização informada manualmente</span>`;
+      await checkDuplicateAndProceed();
     });
+  }
+
+  async function checkDuplicateAndProceed(){
+    const body = document.getElementById('flowBody');
+    body.innerHTML = `<div class="flow-step"><div class="spinner"></div><span>Verificando reportes próximos...</span></div>`;
+    let nearby = null;
+    try {
+      const snap = await db.collection('reports').where('type','==', flowState.type).get();
+      for (const d of snap.docs){
+        const r = d.data();
+        if (typeof r.lat === 'number' && typeof r.lng === 'number'){
+          const dist = haversine(flowState.location.lat, flowState.location.lng, r.lat, r.lng);
+          if (dist <= RADIUS_M){ nearby = { id: d.id, ...r, dist }; break; }
+        }
+      }
+    } catch(e){
+      body.innerHTML = `<div class="warn-box">Erro ao verificar duplicidade: ${e.message}</div>`;
+      return;
+    }
+
+    if (nearby){
+      const t = TYPES[flowState.type];
+      body.innerHTML = `
+        <div class="warn-box">
+          <strong>Já existe um reporte de "${t.label}" a ${Math.round(nearby.dist)}m deste local</strong>
+          (${timeAgo(nearby.createdAt)}, status: ${STATUS_LABEL[nearby.status]||nearby.status}).<br>
+          Novos reportes no raio de ${RADIUS_M}m são bloqueados para evitar duplicidade.
+        </div>
+        <div class="btn-row">
+          <button class="btn secondary" id="btnCancelDup">Voltar</button>
+        </div>`;
+      document.getElementById('btnCancelDup').addEventListener('click', () => { document.getElementById('flowArea').innerHTML=''; });
+      return;
+    }
+
+    renderPhotoStep();
+  }
+
+  function renderPhotoStep(){
+    const body = document.getElementById('flowBody');
+    body.innerHTML = `
+      <label class="photo-input-label" for="photoInput">📷 <span>Toque para tirar/anexar uma foto</span></label>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+      <img id="photoPreview" class="photo-preview hidden">
+      <textarea id="descInput" rows="2" placeholder="Descrição (opcional)"></textarea>
+      <div class="btn-row">
+        <button class="btn secondary" id="btnCancel">Cancelar</button>
+        <button class="btn" id="btnSubmit" disabled>Enviar reporte</button>
+      </div>`;
+
+    document.getElementById('photoInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      flowState.photoFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = document.getElementById('photoPreview');
+        img.src = reader.result;
+        img.classList.remove('hidden');
+        document.getElementById('btnSubmit').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('btnCancel').addEventListener('click', () => { document.getElementById('flowArea').innerHTML=''; });
+    document.getElementById('btnSubmit').addEventListener('click', submitReport);
+  }
+
+  async function submitReport(){
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    try {
+      let photoUrl = null;
+      if (storage && flowState.photoFile){
+        const filename = 'reports/' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.jpg';
+        const ref = storage.ref().child(filename);
+        await ref.put(flowState.photoFile);
+        photoUrl = await ref.getDownloadURL();
+      }
+      const desc = document.getElementById('descInput').value.trim();
+      await db.collection('reports').add({
+        type: flowState.type,
+        lat: flowState.location.lat,
+        lng: flowState.location.lng,
+        photoUrl: photoUrl,
+        description: desc || null,
+        status: 'pendente',
+        createdAt: new Date().toISOString(),
+      });
+      const t = TYPES[flowState.type];
+      document.getElementById('flowArea').innerHTML = `
+        <div class="card flow success-box">
+          <div class="big">✅</div>
+          <div style="font-weight:700; margin:8px 0 4px;">Reporte enviado!</div>
+          <div style="color:var(--text-muted); font-size:14px;">${t.emoji} ${t.label} registrado com sua localização.</div>
+        </div>`;
+    } catch(e){
+      btn.disabled = false;
+      btn.textContent = 'Enviar reporte';
+      alert('Erro ao enviar: ' + e.message);
+    }
   }
 
   init();
