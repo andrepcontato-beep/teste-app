@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -159,7 +160,7 @@
   };
   const STATUS_LABEL = { pendente:'Pendente', em_andamento:'Em andamento', resolvido:'Resolvido' };
 
-  let db = null;
+  let db = null, storage = null;
   let reports = [];
   let activeFilter = 'todos';
   let unsubscribe = null;
@@ -180,6 +181,7 @@
     }
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    storage = firebase.storage();
 
     firebase.auth().onAuthStateChanged(user => {
       if (user){
@@ -341,10 +343,25 @@
             <a class="btn secondary" style="text-align:center; text-decoration:none;" href="${mapsUrl}" target="_blank" rel="noopener">Abrir no Google Maps</a>
             <button class="btn" id="btnClosePopup">Fechar</button>
           </div>
+          <div class="btn-row">
+            <button class="btn danger" id="btnDeleteReport">🗑️ Excluir reporte</button>
+          </div>
         </div>
       </div>`;
     document.getElementById('popupOverlay').addEventListener('click', (e) => { if (e.target.id==='popupOverlay') root.innerHTML=''; });
     document.getElementById('btnClosePopup').addEventListener('click', () => root.innerHTML='');
+    document.getElementById('btnDeleteReport').addEventListener('click', async () => {
+      if (!confirm('Excluir este reporte permanentemente? Essa ação não pode ser desfeita.')) return;
+      try {
+        await db.collection('reports').doc(r.id).delete();
+        if (storage && r.photoUrl){
+          try { await storage.refFromURL(r.photoUrl).delete(); } catch(e){ /* ignora se a foto já não existir */ }
+        }
+        root.innerHTML = '';
+      } catch(e){
+        alert('Erro ao excluir: ' + e.message);
+      }
+    });
     root.querySelectorAll('[data-status]').forEach(b => {
       b.addEventListener('click', async () => {
         try { await db.collection('reports').doc(r.id).update({ status: b.dataset.status }); root.innerHTML=''; }
