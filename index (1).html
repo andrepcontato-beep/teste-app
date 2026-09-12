@@ -96,27 +96,14 @@
   // CONFIGURAÇÃO DO FIREBASE — preencha com os dados do SEU projeto
   // (mesmo valor usado em admin.html — é o mesmo projeto/banco)
   // ======================================================================
-  // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCVd_SelW0r9GYUq6RRfaSRZcI9N8JXocQ",
-  authDomain: "prefeitura-a9988.firebaseapp.com",
-  projectId: "prefeitura-a9988",
-  storageBucket: "prefeitura-a9988.firebasestorage.app",
-  messagingSenderId: "1054788816301",
-  appId: "1:1054788816301:web:ef54cab5aed2bd722ca524",
-  measurementId: "G-KBF3EDT4CN"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+  const firebaseConfig = {
+    apiKey: "AIzaSyCVd_SelW0r9GYUq6RRfaSRZcI9N8JXocQ",
+    authDomain: "prefeitura-a9988.firebaseapp.com",
+    projectId: "prefeitura-a9988",
+    storageBucket: "prefeitura-a9988.firebasestorage.app",
+    messagingSenderId: "1054788816301",
+    appId: "1:1054788816301:web:ef54cab5aed2bd722ca524",
+  };
   // ======================================================================
 
   const TYPES = {
