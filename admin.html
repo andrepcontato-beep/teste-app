@@ -7,6 +7,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root{
     --bg:#f4f5f7; --surface:#ffffff; --surface-2:#eef0f3; --text:#1a1d23; --text-muted:#6b7280;
@@ -81,7 +83,7 @@
   .map-empty{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:13px; text-align:center; padding:20px;}
   .map-caption{font-size:11px; color:var(--text-muted); text-align:center; margin:-10px 0 16px;}
 
-  .popup{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:50;}
+  .popup{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:9999;}
   .popup .card{width:100%; max-width:640px; padding:18px; border-radius:16px 16px 0 0; max-height:80vh; overflow:auto;}
 
   .report-list{display:flex; flex-direction:column; gap:10px;}
@@ -124,10 +126,8 @@
   <!-- PAINEL -->
   <div id="panelView" class="hidden">
     <div class="filters" id="filters"></div>
-    <div class="map-wrap" id="mapWrap">
-      <div class="map-empty">Nenhum reporte ainda.</div>
-    </div>
-    <div class="map-caption">Mapa esquemático (posições relativas). Toque em um pin para ver detalhes ou abrir no Google Maps.</div>
+    <div class="map-wrap" id="mapWrap"></div>
+    <div class="map-caption">Toque em um pin para ver detalhes ou abrir no Google Maps.</div>
     <div class="report-list" id="reportList"></div>
   </div>
 
@@ -245,41 +245,50 @@
     return activeFilter==='todos' ? reports : reports.filter(r => r.type===activeFilter);
   }
 
+  const PIRACANJUBA_CENTER = [-17.302, -49.017];
+  let leafletMap = null;
+  let markersLayer = null;
+
+  function ensureMap(){
+    if (leafletMap) return;
+    leafletMap = L.map('mapWrap').setView(PIRACANJUBA_CENTER, 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(leafletMap);
+    markersLayer = L.layerGroup().addTo(leafletMap);
+  }
+
   function renderMap(){
-    const wrap = document.getElementById('mapWrap');
+    ensureMap();
+    setTimeout(() => leafletMap.invalidateSize(), 0);
     const data = filteredReports().filter(r => typeof r.lat==='number' && typeof r.lng==='number');
-    wrap.innerHTML = '';
-    if (data.length===0){
-      wrap.innerHTML = '<div class="map-empty">Nenhum reporte para exibir.</div>';
+    markersLayer.clearLayers();
+    if (data.length === 0){
+      leafletMap.setView(PIRACANJUBA_CENTER, 13);
       return;
     }
-    let minLat=Math.min(...data.map(r=>r.lat)), maxLat=Math.max(...data.map(r=>r.lat));
-    let minLng=Math.min(...data.map(r=>r.lng)), maxLng=Math.max(...data.map(r=>r.lng));
-    const padLat=(maxLat-minLat)||0.001, padLng=(maxLng-minLng)||0.001;
-    minLat-=padLat*0.2; maxLat+=padLat*0.2; minLng-=padLng*0.2; maxLng+=padLng*0.2;
-
-    for (let i=1;i<4;i++){
-      const v = document.createElement('div');
-      v.className='map-grid-line'; v.style.left=(i*25)+'%'; v.style.top='0'; v.style.width='1px'; v.style.height='100%';
-      wrap.appendChild(v);
-      const h = document.createElement('div');
-      h.className='map-grid-line'; h.style.top=(i*25)+'%'; h.style.left='0'; h.style.height='1px'; h.style.width='100%';
-      wrap.appendChild(h);
-    }
-
+    const bounds = [];
     data.forEach(r => {
-      const xPct = ((r.lng - minLng) / (maxLng - minLng)) * 100;
-      const yPct = 100 - ((r.lat - minLat) / (maxLat - minLat)) * 100;
       const t = TYPES[r.type] || { emoji:'📍', color:'var(--accent)' };
-      const pin = document.createElement('div');
-      pin.className = 'map-pin';
-      pin.style.left = xPct + '%';
-      pin.style.top = yPct + '%';
-      pin.style.background = t.color;
-      pin.innerHTML = `<span>${t.emoji}</span>`;
-      pin.addEventListener('click', () => openPopup(r));
-      wrap.appendChild(pin);
+      const icon = L.divIcon({
+        html: `<div style="background:${t.color};width:30px;height:30px;border-radius:50% 50% 50% 0;
+                transform:rotate(45deg); display:flex; align-items:center; justify-content:center;
+                border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4);">
+                <span style="transform:rotate(-45deg); font-size:15px;">${t.emoji}</span></div>`,
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+      });
+      const marker = L.marker([r.lat, r.lng], { icon }).addTo(markersLayer);
+      marker.on('click', () => openPopup(r));
+      bounds.push([r.lat, r.lng]);
     });
+    if (bounds.length === 1){
+      leafletMap.setView(bounds[0], 16);
+    } else {
+      leafletMap.fitBounds(bounds, { padding: [30, 30] });
+    }
   }
 
   function renderList(){
