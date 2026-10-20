@@ -124,6 +124,7 @@
       <div class="btn-row">
         <button class="btn" id="btnLogin" style="width:100%;">Entrar</button>
       </div>
+      <div style="margin-top:12px;"><a href="#" id="linkReset" style="font-size:13px;">Esqueci minha senha</a></div>
       <div id="loginError" class="warn-box hidden"></div>
     </div>
   </div>
@@ -238,6 +239,26 @@
       })
       .finally(() => { btn.disabled = false; btn.textContent = 'Entrar'; });
   }
+
+  document.getElementById('linkReset').addEventListener('click', (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const errBox = document.getElementById('loginError');
+    if (!email){
+      errBox.textContent = 'Digite seu e-mail no campo acima e clique de novo em "Esqueci minha senha".';
+      errBox.classList.remove('hidden');
+      return;
+    }
+    firebase.auth().sendPasswordResetEmail(email)
+      .then(() => {
+        errBox.textContent = 'Se esse e-mail estiver cadastrado, você receberá um link para redefinir a senha (confira também o spam).';
+        errBox.classList.remove('hidden');
+      })
+      .catch(err => {
+        errBox.textContent = 'Não foi possível enviar: ' + err.message;
+        errBox.classList.remove('hidden');
+      });
+  });
 
   document.getElementById('btnLogout').addEventListener('click', () => firebase.auth().signOut());
 
